@@ -42,7 +42,7 @@ on the right; the arrow cluster and page-nav keys are on the right hand.
 
 | Thumb | Tap | Hold |
 |-------|-----|------|
-| Left outer | Del | **GUI** |
+| Left outer | Ctrl | **GUI** |
 | Left middle | — | **NAV layer** |
 | Left inner | **Space** | — |
 | Right inner | **Space** | — |
