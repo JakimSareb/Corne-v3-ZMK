@@ -1,10 +1,13 @@
 /*
- * Custom Corne peripheral display
- * P keycap logo with glitch + ZMK built-in widgets
+ * Custom Corne peripheral (right half) display:
+ * pixel cat + active layer (synced from central) + battery/BT widgets.
+ *
+ * The image declaration mirrors ZMK's in-tree nice_view art (LVGL I1
+ * format: 8-byte palette followed by rows padded to whole bytes), and the
+ * cat is only ever swapped between two const images — no runtime pixel
+ * mutation, so nothing here depends on LVGL decoder internals.
  */
 
-#include <stdbool.h>
-#include <string.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
@@ -14,150 +17,92 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 #include <zmk/display/widgets/peripheral_status.h>
 #include <lvgl.h>
 
-/* ── P keycap extracted from PARIX logo (cols 4-27, 24px wide x 32px tall) ── */
+#if IS_ENABLED(CONFIG_CORNE_LAYER_SYNC)
+uint8_t corne_synced_layer(void); /* from behavior_layer_fwd.c */
+#else
+static inline uint8_t corne_synced_layer(void) { return 0; }
+#endif
 
-static const uint8_t raw_p_keycap[4 * 24] = {
-    /* Page 0 (rows 0-7) */
-      0,  0,192,224,112, 48, 48, 48, 48, 48, 48, 48,
-     48, 48, 48, 48, 48, 48, 48, 48,112,224,192,  0,
-    /* Page 1 (rows 8-15) */
-      0,  0,255,255,  0,  0,  0,  0,  0,254, 66, 66,
-     66, 66,102, 60,  0,  0,  0,  0,  0,255,255,  0,
-    /* Page 2 (rows 16-23) */
-      0,  0,255,255,128,  0,  0,  0,  0,  7,  0,  0,
-      0,  0,  0,  0,  0,  0,  0,  0,128,255,255,  0,
-    /* Page 3 (rows 24-31) */
-      0,  0,  7, 15, 31, 31, 31, 31, 31, 31, 31, 31,
-     31, 31, 31, 31, 31, 31, 31, 31, 31, 15,  7,  0,
+/* Keep in sync with the display-name properties in config/corne.keymap.
+ * Only the layer index reaches the peripheral, so names live here. */
+static const char *const layer_names[] = {"BASE", "SYM", "NAV"};
+
+/* ── Cat, 28x20, two frames (eyes open / blink) ── */
+
+#define CAT_W 28
+#define CAT_H 20
+
+static const uint8_t cat_open_map[] = {
+    0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0x0c, 0x03, 0x00, 0x00,
+    0x0e, 0x07, 0x00, 0x00, 0x0b, 0x0d, 0x00, 0x00, 0x09, 0xf9, 0x00, 0x00,
+    0x10, 0x00, 0x80, 0x00, 0x10, 0x00, 0x80, 0x00, 0x20, 0x00, 0x40, 0x00,
+    0x26, 0x06, 0x40, 0x00, 0x26, 0x06, 0x40, 0x00, 0x20, 0x00, 0x40, 0x00,
+    0xa0, 0x60, 0x50, 0x00, 0x62, 0x64, 0x60, 0x00, 0x21, 0xe1, 0x00, 0x00,
+    0x20, 0x01, 0x00, 0x00, 0x10, 0x02, 0x00, 0x00, 0x0f, 0xfc, 0x00, 0x00,
+    0x10, 0x02, 0x1e, 0x00, 0x20, 0x01, 0x21, 0x00, 0x20, 0x01, 0x45, 0x00,
+    0x1f, 0xff, 0x86, 0x00,
 };
 
-#define P_WIDTH  24
-#define P_HEIGHT 32
-#define P_STRIDE 3
-
-/* ── Glitch engine ── */
-
-#define GLITCH_INTERVAL_MIN_MS 2000
-#define GLITCH_INTERVAL_RANGE_MS 6000
-#define GLITCH_INITIAL_DELAY_MS 3000
-#define GLITCH_FRAMES_MIN 2
-#define GLITCH_FRAMES_RANGE 4
-#define GLITCH_TIMER_MS 150
-
-static uint16_t glitch_seed = 42;
-static uint32_t glitch_next_ms;
-static uint8_t glitch_frames_left = 0;
-
-static uint16_t glitch_rand(void) {
-    glitch_seed ^= glitch_seed << 7;
-    glitch_seed ^= glitch_seed >> 9;
-    glitch_seed ^= glitch_seed << 8;
-    return glitch_seed;
-}
-
-static void apply_glitch(uint8_t *buf) {
-    if (glitch_frames_left == 0) return;
-    glitch_frames_left--;
-    uint8_t fx = glitch_rand() % 4;
-
-    if (fx == 0) {
-        uint8_t page = glitch_rand() % 4;
-        int8_t shift = (glitch_rand() % 7) - 3;
-        if (shift > 0) {
-            for (int c = P_WIDTH - 1; c >= shift; c--)
-                buf[page * P_WIDTH + c] = buf[page * P_WIDTH + c - shift];
-        } else if (shift < 0) {
-            for (int c = 0; c < P_WIDTH + shift; c++)
-                buf[page * P_WIDTH + c] = buf[page * P_WIDTH + c - shift];
-        }
-    } else if (fx == 1) {
-        uint8_t page = glitch_rand() % 4;
-        uint8_t col = glitch_rand() % (P_WIDTH - 4);
-        uint8_t w = 3 + (glitch_rand() % 6);
-        for (uint8_t c = col; c < col + w && c < P_WIDTH; c++)
-            buf[page * P_WIDTH + c] = (uint8_t)glitch_rand();
-    } else if (fx == 2) {
-        uint8_t page = glitch_rand() % 4;
-        uint8_t col = glitch_rand() % (P_WIDTH - 4);
-        uint8_t w = 4 + (glitch_rand() % 10);
-        for (uint8_t c = col; c < col + w && c < P_WIDTH; c++)
-            buf[page * P_WIDTH + c] = ~buf[page * P_WIDTH + c];
-    } else {
-        uint8_t src = glitch_rand() % 4;
-        uint8_t dst = (src + 1 + (glitch_rand() % 3)) % 4;
-        uint8_t col = glitch_rand() % (P_WIDTH / 2);
-        uint8_t w = P_WIDTH / 3 + (glitch_rand() % (P_WIDTH / 3));
-        for (uint8_t c = col; c < col + w && c < P_WIDTH; c++)
-            buf[dst * P_WIDTH + c] = buf[src * P_WIDTH + c];
-    }
-}
-
-/* ── Logo image rendering ── */
-
-static void convert_p_to_lvgl_i1(const uint8_t *qmk_buf, uint8_t *out) {
-    out[0] = 0xFF; out[1] = 0xFF; out[2] = 0xFF; out[3] = 0xFF;
-    out[4] = 0x00; out[5] = 0x00; out[6] = 0x00; out[7] = 0xFF;
-    uint8_t *pixels = out + 8;
-    memset(pixels, 0, P_STRIDE * P_HEIGHT);
-    for (int page = 0; page < 4; page++) {
-        for (int col = 0; col < P_WIDTH; col++) {
-            uint8_t val = qmk_buf[page * P_WIDTH + col];
-            for (int bit = 0; bit < 8; bit++) {
-                if (val & (1 << bit)) {
-                    int y = page * 8 + bit;
-                    pixels[y * P_STRIDE + (col / 8)] |= (0x80 >> (col % 8));
-                }
-            }
-        }
-    }
-}
-
-static uint8_t img_buf[8 + P_STRIDE * P_HEIGHT];
-static lv_image_dsc_t p_dsc = {
-    .header = { .cf = LV_COLOR_FORMAT_I1, .w = P_WIDTH, .h = P_HEIGHT },
-    .data_size = sizeof(img_buf),
-    .data = img_buf,
+static const uint8_t cat_blink_map[] = {
+    0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff, 0xff, 0x0c, 0x03, 0x00, 0x00,
+    0x0e, 0x07, 0x00, 0x00, 0x0b, 0x0d, 0x00, 0x00, 0x09, 0xf9, 0x00, 0x00,
+    0x10, 0x00, 0x80, 0x00, 0x10, 0x00, 0x80, 0x00, 0x20, 0x00, 0x40, 0x00,
+    0x20, 0x00, 0x40, 0x00, 0x26, 0x06, 0x40, 0x00, 0x20, 0x00, 0x40, 0x00,
+    0xa0, 0x60, 0x50, 0x00, 0x62, 0x64, 0x60, 0x00, 0x21, 0xe1, 0x00, 0x00,
+    0x20, 0x01, 0x00, 0x00, 0x10, 0x02, 0x00, 0x00, 0x0f, 0xfc, 0x00, 0x00,
+    0x10, 0x02, 0x1e, 0x00, 0x20, 0x01, 0x21, 0x00, 0x20, 0x01, 0x45, 0x00,
+    0x1f, 0xff, 0x86, 0x00,
 };
 
-static lv_obj_t *p_img;
-static int64_t last_glitch_time;
-static bool logo_dirty = true;
+static const lv_img_dsc_t cat_open = {
+    .header.cf = LV_COLOR_FORMAT_I1,
+    .header.w = CAT_W,
+    .header.h = CAT_H,
+    .data_size = sizeof(cat_open_map),
+    .data = cat_open_map,
+};
 
-static void update_p(bool with_glitch) {
-    uint8_t buf[4 * P_WIDTH];
-    memcpy(buf, raw_p_keycap, sizeof(buf));
-    if (with_glitch) apply_glitch(buf);
-    convert_p_to_lvgl_i1(buf, img_buf);
-    p_dsc.data = img_buf;
-    p_dsc.header.cf = LV_COLOR_FORMAT_I1;
-    lv_image_set_src(p_img, &p_dsc);
-    lv_obj_invalidate(p_img);
-}
+static const lv_img_dsc_t cat_blink = {
+    .header.cf = LV_COLOR_FORMAT_I1,
+    .header.w = CAT_W,
+    .header.h = CAT_H,
+    .data_size = sizeof(cat_blink_map),
+    .data = cat_blink_map,
+};
 
-static void glitch_timer_cb(lv_timer_t *timer) {
-    int64_t now = k_uptime_get();
-    if (glitch_frames_left == 0) {
-        if ((now - last_glitch_time) > (int64_t)glitch_next_ms) {
-            last_glitch_time = now;
-            glitch_frames_left = GLITCH_FRAMES_MIN + (glitch_rand() % GLITCH_FRAMES_RANGE);
-            glitch_next_ms = GLITCH_INTERVAL_MIN_MS + (glitch_rand() % GLITCH_INTERVAL_RANGE_MS);
-        } else if (logo_dirty) {
-            update_p(false);
-            logo_dirty = false;
+/* ── Periodic update: blink the cat, refresh the layer label ── */
+
+#define TICK_MS 150
+#define BLINK_PERIOD_TICKS 24 /* blink for one tick every ~3.6 s */
+
+static lv_obj_t *cat_img;
+static lv_obj_t *layer_label;
+
+static void tick_cb(lv_timer_t *timer) {
+    static uint32_t tick;
+    static uint8_t shown_layer = 0xFF;
+
+    tick++;
+    lv_image_set_src(cat_img, (tick % BLINK_PERIOD_TICKS) == 0 ? &cat_blink : &cat_open);
+
+    uint8_t layer = corne_synced_layer();
+    if (layer != shown_layer) {
+        shown_layer = layer;
+        if (layer < ARRAY_SIZE(layer_names)) {
+            lv_label_set_text(layer_label, layer_names[layer]);
+        } else {
+            lv_label_set_text_fmt(layer_label, "L%u", layer);
         }
-        return;
     }
-    update_p(true);
-    logo_dirty = true;
 }
 
 /* ── Screen layout (128x32) ──
  *
- * +----------+---------+---------+
- * | BT status|         | Battery |
- * +----------+  [P]    +---------+
- * |          |         |         |
- * +----------+---------+---------+
+ * +-----------+----------------+---------+
+ * | BT status |                | Battery |
+ * +-----------+----------------+---------+
+ * |  (cat)    |     LAYER      |         |
+ * +-----------+----------------+---------+
  */
 
 static struct zmk_widget_battery_status battery_widget;
@@ -166,24 +111,21 @@ static struct zmk_widget_peripheral_status peripheral_widget;
 lv_obj_t *zmk_display_status_screen(void) {
     lv_obj_t *screen = lv_obj_create(NULL);
 
-    /* P keycap — center */
-    p_img = lv_image_create(screen);
-    lv_obj_align(p_img, LV_ALIGN_CENTER, 0, 0);
-    update_p(false);
-    logo_dirty = false;
-    last_glitch_time = k_uptime_get();
-    glitch_next_ms = GLITCH_INITIAL_DELAY_MS;
-    lv_timer_create(glitch_timer_cb, GLITCH_TIMER_MS, NULL);
-
-    /* Built-in peripheral status — top left */
     zmk_widget_peripheral_status_init(&peripheral_widget, screen);
-    lv_obj_align(zmk_widget_peripheral_status_obj(&peripheral_widget),
-                 LV_ALIGN_TOP_LEFT, 0, 0);
+    lv_obj_align(zmk_widget_peripheral_status_obj(&peripheral_widget), LV_ALIGN_TOP_LEFT, 0, 0);
 
-    /* Built-in battery status — top right */
     zmk_widget_battery_status_init(&battery_widget, screen);
-    lv_obj_align(zmk_widget_battery_status_obj(&battery_widget),
-                 LV_ALIGN_TOP_RIGHT, 0, 0);
+    lv_obj_align(zmk_widget_battery_status_obj(&battery_widget), LV_ALIGN_TOP_RIGHT, 0, 0);
+
+    cat_img = lv_img_create(screen);
+    lv_image_set_src(cat_img, &cat_open);
+    lv_obj_align(cat_img, LV_ALIGN_BOTTOM_LEFT, 2, 0);
+
+    layer_label = lv_label_create(screen);
+    lv_label_set_text(layer_label, layer_names[0]);
+    lv_obj_align(layer_label, LV_ALIGN_BOTTOM_MID, 16, -2);
+
+    lv_timer_create(tick_cb, TICK_MS, NULL);
 
     return screen;
 }
