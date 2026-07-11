@@ -17,23 +17,25 @@ Auto-generated from [`config/corne.keymap`](config/corne.keymap) by
 ```
 ╔══════════════════════════ 0 · BASE (QWERTY) ══════════════════════════╗
    ESC   Q   W   E   R   T   │   Y   U   I   O   P   BSPC
-   TAB   A   S   D   F   G   │   H   J   K   L   ;   DEL
+   TAB   A   S   D   F   G   │   H   J   K   L   :   DEL
    SHFT  Z   X   C   V   B   │   N   M   ,   .   /   MO→SYM
-                GUI  NAV  SPC │ SPC  CTRL  ALT
+                RCTRL  NAV  SPC │ SPC  ENTER  GUI
 ```
 Left outer column = **Esc / Tab / Shift**, right outer column = **Bspc / Del /
-hold-for-Symbols**, exactly as you asked.
+hold-for-Symbols**, exactly as you asked. The right-pinky home key taps **`:`**
+and holds for **`;`**.
 
 ```
 ╔══════════════════════════ 1 · SYM (numbers/symbols) ══════════════════╗
    ·    1   2   3   4   5   │   6   7   8   9   0    ·
    ·    !   @   #   $   %   │   ^   &   *   (   )    ·
-   ·    =   -   \   `   '   │   [   ]   {   }   ~    ·
+   ·    =   -   \   `   '   │   [   ]   {   }   ?    ·
                  ·   ·   SPC │ SPC   ·   ·
 ```
 Numbers on the top row, their shifted symbols directly below, and the remaining
-punctuation on the bottom row. `_ + { } | ~ " :` come free via Shift, and
-`< > ?` stay on Shift+`, . /` from the base layer. The outer columns are
+punctuation on the bottom row — plus a dedicated **`?`** on the `/?` key
+(bottom-right). `_ + { } | ~ "` still come free via Shift, and `< >` are
+Shift+`, .` from the base layer (`~` is now Shift+`` ` ``). The outer columns are
 transparent, so Esc/Tab/Shift and Bspc/Del keep working while you're here.
 
 ```
@@ -50,15 +52,16 @@ on the right; the arrow cluster and page-nav keys are on the right hand.
 
 | Thumb | Tap | Hold |
 |-------|-----|------|
-| Left outer | Ctrl | **GUI** |
+| Left outer | — | **R-Ctrl** |
 | Left middle | — | **NAV layer** |
 | Left inner | **Space** | — |
 | Right inner | **Space** | — |
-| Right middle | Enter | **Ctrl** |
-| Right outer | Super (Linux key) | **Alt** |
+| Right middle | **Enter** | — |
+| Right outer | — | **GUI** (Super) |
 
 Shift stays on the base-layer left outer column. Both innermost thumbs are Space,
-as requested.
+as requested. The former Ctrl/GUI/Alt mod-taps on the outer and right-middle
+thumbs are now plain keys (no tap-hold).
 
 ## Your macros — decoded from the Defy
 
