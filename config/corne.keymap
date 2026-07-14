@@ -159,9 +159,9 @@
         nav_layer {
             display-name = "NAV";
             bindings = <
-   &trans  &kp F1     &kp F2     &kp F3     &kp F4      &kp F5             &kp HOME   &kp PG_DN  &kp PG_UP  &kp END    &kp PSCRN  &trans
-   &trans  &m_vim_q   &m_vim_w   &m_cs_j    &m_cs_pct   &m_cs_dq           &kp LEFT   &kp DOWN   &kp UP     &kp RIGHT  &m_cs_p    &trans
-   &trans  &kp LG(LEFT) &kp LG(RIGHT) &kp LG(UP) &kp LG(DOWN) &kp LG(LS(Q)) &kp LC(S) &kp LC(W) &kp LC(D)  &kp LC(INS) &kp INS   &trans
+   &bt BT_CLR  &kp F1     &kp F2     &kp F3     &kp F4      &kp F5             &kp HOME   &kp PG_DN  &kp PG_UP  &kp END    &kp PSCRN  &trans
+   &trans      &m_vim_q   &m_vim_w   &m_cs_j    &m_cs_pct   &m_cs_dq           &kp LEFT   &kp DOWN   &kp UP     &kp RIGHT  &m_cs_p    &trans
+   &trans      &kp LG(LEFT) &kp LG(RIGHT) &kp LG(UP) &kp LG(DOWN) &kp LG(LS(Q)) &kp LC(S) &kp LC(W) &kp LC(D)  &kp LC(INS) &kp INS   &trans
                                   &trans  &trans  &kp SPACE      &kp SPACE  &trans  &trans
             >;
         };
